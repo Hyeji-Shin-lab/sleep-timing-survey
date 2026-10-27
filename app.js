@@ -98,6 +98,24 @@ function loadSharedStatus() {
   document.head.appendChild(script);
 }
 function csvEscape(value) { const s = String(value ?? ""); return /[",\n]/.test(s) ? '"' + s.replaceAll('"','""') + '"' : s; }
+// 신혜지 참여자의 기기(카카오톡 내장 브라우저)에서 CSV 파일 다운로드가 되지 않아,
+// 카톡 안에서 + 이 기기에 신혜지 기록이 있을 때만 CSV 내용을 클립보드에도 복사합니다.
+// 다른 참여자의 기기에서는 기존 동작 그대로입니다.
+const clipboardFallbackParticipants = ["신혜지"];
+function needsClipboardFallback(records) {
+  return /KAKAOTALK/i.test(navigator.userAgent) && records.some(row => clipboardFallbackParticipants.includes(row.participant));
+}
+function copyToClipboard(text) {
+  const box = document.createElement("textarea");
+  box.value = text; box.setAttribute("readonly", "");
+  box.style.cssText = "position:fixed;top:0;left:-9999px;opacity:0";
+  document.body.appendChild(box); box.select(); box.setSelectionRange(0, text.length);
+  let copied = false;
+  try { copied = document.execCommand("copy"); } catch {}
+  box.remove();
+  if (!copied && navigator.clipboard) { navigator.clipboard.writeText(text).catch(() => {}); copied = true; }
+  return copied;
+}
 function exportCsv() {
   const all = localRecords();
   if (!all.length) { $("status").textContent = "이 기기에서 내보낼 저장 기록이 없습니다."; return; }
@@ -105,6 +123,11 @@ function exportCsv() {
   const csv = [headers.join(","), ...all.map(row => headers.map(h => csvEscape(row[h])).join(","))].join("\n");
   const blob = new Blob(["\ufeff" + csv], {type:"text/csv;charset=utf-8"});
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "sleep-study-checkins.csv"; a.click(); URL.revokeObjectURL(a.href);
+  if (needsClipboardFallback(all)) {
+    const copied = copyToClipboard(csv);
+    $("status").textContent = all.length + "건을 CSV로 내보냈습니다." + (copied ? " 파일이 안 받아졌다면 클립보드에 복사돼 있으니 카톡 '나와의 채팅'에 붙여넣으세요." : "");
+    return;
+  }
   $("status").textContent = all.length + "건을 CSV로 내보냈습니다.";
 }
 function renderCalendar() {
